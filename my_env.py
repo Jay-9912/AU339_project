@@ -1,8 +1,13 @@
+import sys
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import logging
 import random
 import gym
 import time
 from Graph import *
+import numpy as np
+import cv2
+from gym.envs.classic_control import rendering
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +22,14 @@ class School(gym.Env):
         self.scale = 1
         self.states = range(self.graph.l*self.graph.w) # 状态空间
 
-        self.x = [150,250,350,450] * 4
-        self.y=[150] * 4 + [250] * 4 + [350] * 4 + [450] * 4
-
+        # self.x = [150,250,350,450] * 4
+        # self.x = list(range(150, 500, 100)) * 4
+        self.x = list(range(110, 500, 20)) * 20 
+        # print(self.x)
+        # self.y=[150] * 4 + [250] * 4 + [350] * 4 + [450] * 4
+        self.y = []
+        for i in range(110, 500, 20):
+            self.y = self.y + [i] * 20
         self.terminate_states = dict()  # 终止状态为字典格式
         # self.terminate_states[11] = 1
         # self.terminate_states[12] = 1
@@ -74,6 +84,37 @@ class School(gym.Env):
         valid_action = list(self.graph.getVertex(self.state).getDirection()) + ['stop']
         return random.sample(valid_action, 1)[0]
 
+    def generate_obstacle(self, num):
+        self.obstacle_mask = np.zeros((self.graph.w,self.graph.l))  # 
+        obstacle_list = random.sample(range(len(self.states)), num)
+        for i in obstacle_list:
+            row = i // self.graph.l
+            col = i % self.graph.l
+            self.obstacle_mask[row][col] = 1
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        self.obstacle_mask = cv2.dilate(self.obstacle_mask, kernel)
+        self.obstacles = []
+
+        for i in range(self.graph.w):
+            for j in range(self.graph.l):
+                if self.obstacle_mask[i][j] == 1:
+                    obstacle = rendering.make_polygon([(0,0),(20,0),(20,20),(0,20)])
+                    obstacletrans = rendering.Transform(translation=(100+j*20, 100+i*20))
+                    obstacle.add_attr(obstacletrans)
+                    obstacle.set_color(0, 0, 0)
+                    self.obstacles.append(obstacle)
+                    self.viewer.add_geom(obstacle)
+                    continue
+                neighs = list(self.graph.getVertex(i*self.graph.l+j).getConnections())
+                for n in neighs:
+                    row = n // self.graph.l
+                    col = n % self.graph.l
+                    if self.obstacle_mask[row][col] == 1:
+                        self.graph.getVertex(i*self.graph.l+j).delNeighbor(n)
+        
+
+
     def step(self, action): # 更新state
         # 系统当前状态
         state = self.state
@@ -101,11 +142,10 @@ class School(gym.Env):
 
     def reset(self):
         # self.state = self.states[int(random.random() * len(self.states))]
-        self.state = 12
+        self.state = 0
         return self.state
 
     def render(self, mode='human'):
-        from gym.envs.classic_control import rendering
         screen_width = 600 * self.scale
         screen_height = 600 * self.scale
 
@@ -114,12 +154,12 @@ class School(gym.Env):
 
             #创建网格世界
             self.lines = []
-            for i in range(5):
-                line = rendering.Line((100,100*i+100), (500, 100*i+100))
+            for i in range(21):
+                line = rendering.Line((100,20*i+100), (500, 20*i+100))
                 line.set_color(0,0,0)
                 self.lines.append(line)
-            for i in range(5):
-                line = rendering.Line((100*i+100,100), (100*i+100, 500))
+            for i in range(21):
+                line = rendering.Line((20*i+100,100), (20*i+100, 500))
                 line.set_color(0,0,0)
                 self.lines.append(line)
             # self.line1 = rendering.Line((100,100),(500,100))
@@ -158,7 +198,7 @@ class School(gym.Env):
             # self.diamond.set_color(0, 0, 1)
 
             #创建机器人
-            self.robot= rendering.make_circle(30)
+            self.robot= rendering.make_circle(6)
             self.robotrans = rendering.Transform()
             self.robot.add_attr(self.robotrans)
             self.robot.set_color(0, 1, 0)
@@ -191,6 +231,7 @@ class School(gym.Env):
             # self.viewer.add_geom(self.fire2)
             # self.viewer.add_geom(self.diamond)
             self.viewer.add_geom(self.robot)
+            self.generate_obstacle(8)
 
         if self.state is None: 
             return None
@@ -204,7 +245,7 @@ class School(gym.Env):
             self.viewer.close()
 
 if __name__ == '__main__':
-    g = Rect_Graph(4,4)
+    g = Rect_Graph(20,20)
     env = School(g)
     env.reset()
     for i in range(1000):
