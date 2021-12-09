@@ -17,6 +17,25 @@ logger = logging.getLogger(__name__)
 # 3  4  5
 # 0  1  2
 
+class Agent():
+    def __init__(self, init_state, id):
+        self.state = init_state
+        self.id = id
+        self.viz = rendering.make_circle(6)
+        self.trans = rendering.Transform()
+        self.viz.add_attr(self.trans)
+        self.viz.set_color(0, 1, 0)
+    
+    def get_action(self, env):
+        # 需要根据当前位置、附近保安位置和策略、小偷位置综合决策
+        return self.random_action(env)
+
+    def getValidAction(self, n, env):
+        return list(env.graph.getVertex(n).getDirection()) + ['stop']
+
+    def random_action(self, env):
+        valid_action = self.getValidAction(self.state, env)
+        return random.sample(valid_action, 1)[0]
 
 class School(gym.Env):
     metadata = {
@@ -24,11 +43,12 @@ class School(gym.Env):
         'video.frames_per_second': 1
     }
 
-    def __init__(self, graph):
-        self.graph = graph
+    def __init__(self, graph, agent_num):
+        self.graph = graph # rect_graph
         self.scale = 1
         self.states = range(self.graph.l*self.graph.w)  # 状态空间
-
+        self.agent_num = agent_num
+        self.agent_list = []
         # self.x = [150,250,350,450] * 4
         # self.x = list(range(150, 500, 100)) * 4
         self.x = list(range(110, 500, 20)) * 20
@@ -37,23 +57,20 @@ class School(gym.Env):
         self.y = []
         for i in range(110, 500, 20):
             self.y = self.y + [i] * 20
-        self.terminate_states = dict()  # 终止状态为字典格式
-        # self.terminate_states[11] = 1
-        # self.terminate_states[12] = 1
-        # self.terminate_states[15] = 1
 
         self.actions = ['n', 's', 'w', 'e', 'stop']  # 上下左右以及不动五个动作
 
-        self.rewards = dict()        # 回报的数据结构为字典
-        # self.rewards['8_s'] = -1.0
-        # self.rewards['13_w'] = -1.0
-        # self.rewards['7_s'] = -1.0
-        # self.rewards['10_e'] = -1.0
-        # self.rewards['14_4'] = 1.0
 
         self.t = dict()             # 状态转移的数据格式为字典
-        for state in range(self.graph.l*self.graph.w):
+        self.viewer = None
+        self.state = None
+        # self.init_state_list = self.GetInitState() # 需要初始化每个保安的初始位置  df part
+        self.init_state_list = [0, 19, 381, 400]
+        self.init_env()
 
+    def init_env(self)
+        # 建立状态转移关系
+        for state in range(self.graph.l*self.graph.w):
             key = "%d_stop" % (state)
             self.t[key] = state
             for action in self.actions[:4]:
@@ -62,38 +79,25 @@ class School(gym.Env):
                     self.t[key] = self.graph.getVertex(
                         state).getNeighbor(action)
         # print(self.t)
-        self.gamma = 0.8  # 折扣因子
-        self.viewer = None
-        self.state = None
+        # 初始化agent
+        for num in range(self.agent_num):
+            agent = Agent(self.init_state_list[num], num)
+            self.agent_list.append(agent)
 
     def set_seed(self, seed):
         random.seed(seed)
         np.random.seed(seed)
 
-    def getTerminal(self):
-        return self.terminate_states
-
-    def getGamma(self):
-        return self.gamma
-
     def getStates(self):
         return self.states
-
-    def getValidAction(self, n):
-        return list(self.graph.getVertex(n).getDirection()) + ['stop']
 
     def getAction(self):
         return self.actions
 
-    def getTerminate_states(self):
-        return self.terminate_states
-
     def setState(self, s):
         self.state = s
 
-    def random_action(self):
-        valid_action = self.getValidAction(self.state)
-        return random.sample(valid_action, 1)[0]
+
 
     # gym中显示的方格与obstacle_mask索引关系，以3*4(l*w)为例
     # (3,0) (3,1) (3,2)
@@ -147,17 +151,8 @@ class School(gym.Env):
 
         self.state = next_state
 
-        is_terminal = False
 
-        if next_state in self.terminate_states:
-            is_terminal = True
-
-        if key not in self.rewards:
-            r = 0.0
-        else:
-            r = self.rewards[key]
-
-        return next_state, r, is_terminal, {}
+        return next_state
 
     def reset(self):
         # self.state = self.states[int(random.random() * len(self.states))]
@@ -182,11 +177,12 @@ class School(gym.Env):
                 line.set_color(0, 0, 0)
                 self.lines.append(line)
 
-            # 创建机器人
-            self.robot = rendering.make_circle(6)
-            self.robotrans = rendering.Transform()
-            self.robot.add_attr(self.robotrans)
-            self.robot.set_color(0, 1, 0)
+            # 创建保安
+            for agent in self.agent_list:
+                self.robot = rendering.make_circle(6)
+                self.robotrans = rendering.Transform()
+                self.robot.add_attr(self.robotrans)
+                self.robot.set_color(0, 1, 0)
 
             for i in self.lines:
                 self.viewer.add_geom(i)
