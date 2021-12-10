@@ -1,5 +1,6 @@
 # import sys
 # sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+import enum
 import logging
 import random
 import gym
@@ -21,11 +22,22 @@ class Agent():
     def __init__(self, init_state, id):
         self.state = init_state
         self.id = id
+
+    def render(self):
         self.viz = rendering.make_circle(6)
         self.trans = rendering.Transform()
         self.viz.add_attr(self.trans)
         self.viz.set_color(0, 1, 0)
     
+    def set_location(self, x, y):
+        self.trans.set_translation(x, y)
+
+    def get_state(self):
+        return self.state
+
+    def update_state(self, next_state):
+        self.state = next_state
+
     def get_action(self, env):
         # 需要根据当前位置、附近保安位置和策略、小偷位置综合决策
         return self.random_action(env)
@@ -52,23 +64,26 @@ class School(gym.Env):
         # self.x = [150,250,350,450] * 4
         # self.x = list(range(150, 500, 100)) * 4
         self.x = list(range(110, 500, 20)) * 20
+        # print('x:', len(self.x))
         # print(self.x)
         # self.y=[150] * 4 + [250] * 4 + [350] * 4 + [450] * 4
         self.y = []
         for i in range(110, 500, 20):
             self.y = self.y + [i] * 20
-
+        # print('y:', len(self.y))
         self.actions = ['n', 's', 'w', 'e', 'stop']  # 上下左右以及不动五个动作
 
 
         self.t = dict()             # 状态转移的数据格式为字典
         self.viewer = None
         self.state = None
-        # self.init_state_list = self.GetInitState() # 需要初始化每个保安的初始位置  df part
-        self.init_state_list = [0, 19, 381, 400]
+        # self.state = self.GetInitState() # 需要初始化每个保安的初始位置  df part
+        self.state = [0, 19, 380, 399]
+        self.set_seed(4)
         self.init_env()
+        
 
-    def init_env(self)
+    def init_env(self):
         # 建立状态转移关系
         for state in range(self.graph.l*self.graph.w):
             key = "%d_stop" % (state)
@@ -81,8 +96,10 @@ class School(gym.Env):
         # print(self.t)
         # 初始化agent
         for num in range(self.agent_num):
-            agent = Agent(self.init_state_list[num], num)
+            agent = Agent(self.state[num], num)
             self.agent_list.append(agent)
+        self.generate_obstacle(8)
+        
 
     def set_seed(self, seed):
         random.seed(seed)
@@ -92,11 +109,14 @@ class School(gym.Env):
         return self.states
 
     def getAction(self):
-        return self.actions
+        pass
 
     def setState(self, s):
         self.state = s
 
+    def getRandomAction(self):
+        action = [agent.random_action(self) for agent in self.agent_list]
+        return action
 
 
     # gym中显示的方格与obstacle_mask索引关系，以3*4(l*w)为例
@@ -115,19 +135,16 @@ class School(gym.Env):
 
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         self.obstacle_mask = cv2.dilate(self.obstacle_mask, kernel)
-        self.obstacles = []
-
+        # 删除和障碍物相连的边
         for i in range(self.graph.w):
             for j in range(self.graph.l):
                 if self.obstacle_mask[i][j] == 1:
-                    obstacle = rendering.make_polygon(
-                        [(0, 0), (20, 0), (20, 20), (0, 20)])
-                    obstacletrans = rendering.Transform(
-                        translation=(100+j*20, 100+i*20))
-                    obstacle.add_attr(obstacletrans)
-                    obstacle.set_color(0, 0, 0)
-                    self.obstacles.append(obstacle)
-                    self.viewer.add_geom(obstacle)
+                    neighs = list(self.graph.getVertex(
+                        i*self.graph.l+j).getConnections())
+                    for n in neighs:
+                        row = n // self.graph.l
+                        col = n % self.graph.l
+                        self.graph.getVertex(i*self.graph.l+j).delNeighbor(n)
                     continue
                 neighs = list(self.graph.getVertex(
                     i*self.graph.l+j).getConnections())
@@ -142,21 +159,25 @@ class School(gym.Env):
         state = self.state
         # if state in self.terminate_states:
         #     return state, 0, True, {}
-        print(self.graph.getVertex(state).getDirection())
-        key = "%d_%s" % (state, action)
+        # print(self.graph.getVertex(state).getDirection())
+        next_state_list = []
+        for id in range(self.agent_num):
+            key = "%d_%s" % (state[id], action[id])
 
-        # 状态转移
-        assert (key in self.t)
-        next_state = self.t[key]
+            # 状态转移
+            assert (key in self.t)
+            next_state = self.t[key]
+            self.agent_list[id].update_state(next_state)
+            next_state_list.append(next_state)
+            
+        self.state = next_state_list
 
-        self.state = next_state
 
-
-        return next_state
+        return next_state_list
 
     def reset(self):
         # self.state = self.states[int(random.random() * len(self.states))]
-        self.state = 0
+        self.state = [0, 19, 380, 399]
         return self.state
 
     def render(self, mode='human'):
@@ -165,7 +186,6 @@ class School(gym.Env):
 
         if self.viewer is None:
             self.viewer = rendering.Viewer(screen_width, screen_height)
-
             # 创建网格世界
             self.lines = []
             for i in range(21):
@@ -177,23 +197,36 @@ class School(gym.Env):
                 line.set_color(0, 0, 0)
                 self.lines.append(line)
 
-            # 创建保安
+            # 渲染保安
             for agent in self.agent_list:
-                self.robot = rendering.make_circle(6)
-                self.robotrans = rendering.Transform()
-                self.robot.add_attr(self.robotrans)
-                self.robot.set_color(0, 1, 0)
+                agent.render()
+                self.viewer.add_geom(agent.viz)
 
             for i in self.lines:
                 self.viewer.add_geom(i)
+            self.obstacles = []
 
-            self.viewer.add_geom(self.robot)
-            self.generate_obstacle(8)
+            for i in range(self.graph.w):
+                for j in range(self.graph.l):
+                    if self.obstacle_mask[i][j] == 1:
+                        obstacle = rendering.make_polygon(
+                            [(0, 0), (20, 0), (20, 20), (0, 20)])
+                        obstacletrans = rendering.Transform(
+                            translation=(100+j*20, 100+i*20))
+                        obstacle.add_attr(obstacletrans)
+                        obstacle.set_color(0, 0, 0)
+                        self.obstacles.append(obstacle)
+                        self.viewer.add_geom(obstacle)
+                        
+
+            
 
         if self.state is None:
             return None
-
-        self.robotrans.set_translation(self.x[self.state], self.y[self.state])
+        for agent in self.agent_list:
+            state = agent.get_state()
+            # print('state:', state)
+            agent.set_location(self.x[state], self.y[state])
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
@@ -204,11 +237,11 @@ class School(gym.Env):
 
 if __name__ == '__main__':
     g = Rect_Graph(20, 20)
-    env = School(g)
+    env = School(g, 4)
     env.reset()
-    env.set_seed(4)
+    
     for i in range(1000):
         env.render()
-        action = env.random_action()
-        env.step(action)
+        action = env.getRandomAction() # list
+        env.step(action) 
         time.sleep(1)
