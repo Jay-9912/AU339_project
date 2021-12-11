@@ -10,9 +10,9 @@
 3. To-do list
 
     - [x] multi guards
-    - [ ] scalable map
-    - [ ] thief model
-    - [ ] alert on theft event and perception of other guards nearby
+    - [x] scalable map
+    - [x] thief model
+    - [x] alert on theft event and perception of other guards nearby
     - [ ] patrolling algorithm
     - [ ] dispatching algorithm
 
