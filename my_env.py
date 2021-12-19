@@ -9,6 +9,7 @@ from Graph import *
 import numpy as np
 import cv2
 from gym.envs.classic_control import rendering
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,11 @@ class School(gym.Env):
         self.graph = graph  # rect_graph
         self.grid_size = 20
         self.states = range(self.graph.l * self.graph.w)  # 状态空间
+        self.time_flow = np.zeros((self.graph.w, self.graph.l))
+        self.detect_value = 1
+        self.detected_graph = np.zeros((self.graph.w, self.graph.l))
+        self.porb_distrib = np.zeros((self.graph.w, self.graph.l))
+
         self.agent_num = agent_num
         self.thief_num = thief_num
         self.obstacle_num = obstacle_num
@@ -219,6 +225,50 @@ class School(gym.Env):
             self.thief_list[k].escape = 1  # 逃跑成功
             self.viewer.geoms.remove(self.thief_list[k].viz)  # 删除图形显示
             self.thief_list.pop(k)  # 删除键
+    def cal_weight(self, me, neighbor, current_time):
+        xm = me.get_state() // self.graph.l
+        ym = me.get_state() % self.graph.l
+        xn = neighbor.getId() // self.graph.l
+        yn = neighbor.getId() % self.graph.l
+        detect_means = np.mean(self.detected_graph) # 是否需要用平均频次来作为参考
+
+        thief_inc = self.porb_distrib[xn, yn] - self.porb_distrib[xm, ym] # 概率分布增量
+        time_delta = current_time - self.time_flow[xn, yn] # 时间间隔
+
+        detect_need = 0 # negative value
+        for next_neighbor in list(self.graph.getVertex(neighbor.getId()).getConnections()):
+            if next_neighbor != me.get_state():
+                xnn = next_neighbor // self.graph.l
+                ynn = next_neighbor % self.graph.l
+                detect_need -= 0.5 * self.detected_graph[xnn, ynn]
+        detect_need -= 1*self.detected_graph[xn,yn]
+
+        nearby_repulse = 0# negative value
+        for nearby_agent_id in me.guard_nearby:
+            nearby_agent = self.agent_list[nearby_agent_id]
+            xna = nearby_agent.get_state() // self.graph.l
+            yna = nearby_agent.get_state() % self.graph.l
+            nearby_repulse -= 0.1*((xn - xm)*(xna - xn) + (yn - ym)*(yna - yn)) # 利用向量乘法
+
+        weight = 1000*thief_inc + 1*time_delta + 1*(detect_need- 2.5*detect_means) + 1*nearby_repulse
+
+        return weight
+    
+    def getAction(self, iteration):
+        action = []
+        #env.graph.getVertex(n).getDirection()
+        for agent in self.agent_list:
+            chosen = {}
+            node = self.graph.getVertex(agent.get_state())
+            neighbors = list(node.getConnections())
+            for n in neighbors:
+                weight = self.cal_weight(agent, self.graph.getVertex(n), iteration)
+                chosen[n] = weight
+            print(chosen)
+            choice = max(chosen, key=chosen.get)
+            direction = node.connectedTo[choice][0]
+            action.append(direction)
+        return action
 
     def set_seed(self, seed):
         random.seed(seed)
@@ -226,9 +276,42 @@ class School(gym.Env):
 
     def getStates(self):
         return self.states
+    
+    def detect(self, iteration):
+        detect_list=[]
+        for agent in self.agent_list:
+            detect_list.append(agent.get_state())
+            row = agent.get_state() // self.graph.l
+            col = agent.get_state() % self.graph.l
+            self.time_flow[row][col] = iteration
+            self.detected_graph[row][col] = self.detected_graph[row][col] + self.detect_value 
+            neighbors = list(self.graph.getVertex(agent.get_state()).getConnections())
+            for n in neighbors:
+                detect_list.append(n)
+                row = n // self.graph.l
+                col = n % self.graph.l
+                self.time_flow[row][col] = iteration
+                self.detected_graph[row][col] = self.detected_graph[row][col] + self.detect_value 
+                next_neighbors = list(self.graph.getVertex(n).getConnections()) 
+                for m in next_neighbors:
+                    if m in detect_list:
+                        continue
+                    detect_list.append(m)
+                    row = m // self.graph.l
+                    col = m % self.graph.l
+                    self.time_flow[row][col] = iteration
+                    self.detected_graph[row][col] = self.detected_graph[row][col] + self.detect_value 
+        #感知机器人附近是否有其他机器人
+        for agent in self.agent_list:
+            agent.clear_guard_nearby()
+        for i in range(self.agent_num):
+            for j in range(i + 1, self.agent_num):
+                if self.cal_state_dist(self.agent_list[i].get_state(),
+                                       self.agent_list[j].get_state()) < self.perception_range:
 
-    def getAction(self):
-        pass
+                    self.agent_list[i].add_guard_nearby(j)
+                    self.agent_list[j].add_guard_nearby(i)
+        
 
     def setState(self, s):
         self.state = s
@@ -387,24 +470,56 @@ class School(gym.Env):
     def close(self):
         if self.viewer:
             self.viewer.close()
+    
+    def generate_probability_distribution(self):
+        # 获取小偷概率分布图（从左上角开始的）
+        # kong
+        self.porb_mask = copy.deepcopy(self.obstacle_mask)
+        self.porb_mask *= -1
+        self.porb_mask += 1
+        k_size = 9
+        gauss_kernel = cv2.getGaussianKernel(k_size, 1)
+        gauss_kernel = np.dot(gauss_kernel, gauss_kernel.T)
+        gauss_kernel[gauss_kernel < 0.001] = 0.001
+
+        self.porb_distrib = np.zeros((self.graph.w, self.graph.l))
+        for id in range(len(self.thief_list)):
+            i = self.thief_list[id].get_state()
+            x0 = i // self.graph.l
+            y0 = i % self.graph.l
+            x1 = max(0, x0 - (k_size // 2))
+            x2 = min(self.graph.w - 1, x0 + (k_size // 2))
+            y1 = max(0, y0 - (k_size // 2))
+            y2 = min(self.graph.l - 1, y0 + (k_size // 2))
+            x3 = max(0, (k_size // 2) - x0)
+            x4 = min(k_size - 1, self.graph.w - 1 - x0 + (k_size // 2))
+            y3 = max(0, (k_size // 2) - y0)
+            y4 = min(k_size - 1, self.graph.l - 1 - y0 + (k_size // 2))
+            self.porb_distrib[x1:x2, y1:y2] += gauss_kernel[x3:x4, y3:y4]
+
+        self.porb_distrib = self.porb_distrib * self.porb_mask
 
 
 if __name__ == '__main__':
-    g = Rect_Graph(GRAPH_LENGTH, GRAPH_WIDTH)
+    g = Rect_Graph(40, 36)
     env = School(g, 4, 5, 6, 10, 8)
     env.reset()
 
     for i in range(1000):
+        env.detect(i)
         # 假设2s时出现小偷，10s偷完，这里需要根据需要设置合适的小偷产生模型
-        if i == 2:
+        if i%7 == 3:
             env.generate_thief()
-        if i == 10:
+            env.generate_probability_distribution()
+        if i == 10: 
             env.cal_loss()
             print('loss:', env.loss)
         # if i ==3 :
         #     del env.thief_list[1]
         env.render()
-        action = env.getRandomAction()  # list
+        action = env.getAction(i)
+        #action = env.getRandomAction()  # list
         # print(env.state)
         env.step(action)
         time.sleep(1)
+
