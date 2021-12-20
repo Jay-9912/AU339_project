@@ -23,24 +23,24 @@ GRAPH_WIDTH = 36
 # 0  1  2
 
 
-class Agent():
+class Agent(): # 保安类
     def __init__(self, init_state, id, res):
-        self.state = init_state
-        self.id = id
-        self.guard_nearby = []
-        self.observe_range = 3
-        self.res = res
+        self.state = init_state # 初始state
+        self.id = id 
+        self.guard_nearby = [] # 附近的保安
+        self.observe_range = 3 # 观察范围
+        self.res = res # 分辨率
 
-    def change(self):
+    def change(self): # 改变颜色
         self.viz.set_color(1, 0, 0)
 
     def render(self):
-        self.viz = rendering.Image('guard.jpg', self.res - 1, self.res - 1)
-        self.trans = rendering.Transform()
+        self.viz = rendering.Image('guard.jpg', self.res - 1, self.res - 1) # 添加卡通形象
+        self.trans = rendering.Transform() 
         self.viz.add_attr(self.trans)
-        self.sight_list = {}
+        self.sight_list = {} 
         self.trans_list = {}
-        for i in range(-self.observe_range, self.observe_range + 1):
+        for i in range(-self.observe_range, self.observe_range + 1): # 渲染观察范围
             for j in range(
                     abs(i) - self.observe_range,
                     self.observe_range - abs(i) + 1):
@@ -55,9 +55,9 @@ class Agent():
                 sight.set_color_rgbd(112 / 255.0, 10 / 255.0, 245 / 255.0, 0.2)
                 self.sight_list[(i, j)] = sight
 
-    def set_location(self, x, y):
+    def set_location(self, x, y): # 设置保安的位置
         self.trans.set_translation(x, y)
-        for key in self.sight_list.keys():
+        for key in self.sight_list.keys(): # 相应地更新观察范围的位置
             row = self.state // GRAPH_LENGTH
             col = self.state % GRAPH_LENGTH
             row_sight = row + key[0]
@@ -65,66 +65,66 @@ class Agent():
             self.trans_list[key].set_translation(
                 x + key[1] * self.res - self.res / 2,
                 y + key[0] * self.res - self.res / 2)
-            if row_sight < 0 or row_sight >= GRAPH_WIDTH or col_sight < 0 or col_sight >= GRAPH_LENGTH:
+            if row_sight < 0 or row_sight >= GRAPH_WIDTH or col_sight < 0 or col_sight >= GRAPH_LENGTH: # 消除超出地图范围的观察范围
                 self.sight_list[key].set_color_rgbd(112 / 255.0, 10 / 255.0,
                                                     245 / 255.0, 0)
             else:
                 self.sight_list[key].set_color_rgbd(112 / 255.0, 10 / 255.0,
                                                     245 / 255.0, 0.2)
 
-    def get_state(self):
+    def get_state(self): # 获得保安状态
         return self.state
 
-    def update_state(self, next_state):
+    def update_state(self, next_state): # 更新状态
         self.state = next_state
 
     def get_action(self, env):
         # 需要根据当前位置、附近保安位置和策略、小偷位置综合决策
         return self.random_action(env)
 
-    def getValidAction(self, n, env):
+    def getValidAction(self, n, env): # 获得合法action
         return list(env.graph.getVertex(n).getDirection()) + ['stop']
 
-    def random_action(self, env):
+    def random_action(self, env): # 随即策略
         valid_action = self.getValidAction(self.state, env)
         return random.sample(valid_action, 1)[0]
 
-    def clear_guard_nearby(self):
+    def clear_guard_nearby(self): # 清除附近的保安列表
         self.guard_nearby = []
 
-    def add_guard_nearby(self, id):
+    def add_guard_nearby(self, id): # 添加附近的保安
         self.guard_nearby.append(id)
 
 
-class Thief():
+class Thief(): # 小偷类
     def __init__(self, init_state, id, res):
-        self.state = init_state
+        self.state = init_state # 初始状态
         self.id = id
-        self.escape = 0
-        self.res = res
+        self.escape = 0 # 是否逃跑成功
+        self.res = res # 分辨率
 
     def render(self):
-        self.viz = rendering.Image('thief.jpg', self.res - 1, self.res - 1)
+        self.viz = rendering.Image('thief.jpg', self.res - 1, self.res - 1) # 渲染小偷
         self.trans = rendering.Transform()
         self.viz.add_attr(self.trans)
 
-    def set_location(self, x, y):
+    def set_location(self, x, y): # 设置位置
         self.trans.set_translation(x, y)
 
-    def get_state(self):
+    def get_state(self): # 获得状态
         return self.state
 
-    def update_state(self, next_state):
+    def update_state(self, next_state): # 更新状态
         self.state = next_state
 
-    def __del__(self):
+    def __del__(self): # 析构
         if self.escape == 0:
             print("Thief No.%d is caught by guard" % (self.id))
         else:
             print("Thief No.%d escapes" % (self.id))
 
 
-class School(gym.Env):
+class School(gym.Env): # 学校类
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 1
@@ -134,23 +134,23 @@ class School(gym.Env):
                  theft_time, obstacle_num):
         self.set_seed(4)
         self.graph = graph  # rect_graph
-        self.grid_size = 20
+        self.grid_size = 20 # 网格大小
         self.states = range(self.graph.l * self.graph.w)  # 状态空间
-        self.time_flow = np.zeros((self.graph.w, self.graph.l))
+        self.time_flow = np.zeros((self.graph.w, self.graph.l)) 
         self.detect_value = 1
         self.detected_graph = np.zeros((self.graph.w, self.graph.l))
-        self.porb_distrib = np.zeros((self.graph.w, self.graph.l))
+        self.prob_distrib = np.zeros((self.graph.w, self.graph.l))
 
-        self.agent_num = agent_num
-        self.thief_num = thief_num
-        self.obstacle_num = obstacle_num
-        self.perception_range = perception_range
-        self.theft_time = theft_time
-        self.agent_list = []
-        self.thief_list = {}
-        self.screen_width = 1200
+        self.agent_num = agent_num # 保安个数
+        self.thief_num = thief_num # 小偷个数
+        self.obstacle_num = obstacle_num # 障碍物个数
+        self.perception_range = perception_range # 保安对讲机通信范围
+        self.theft_time = theft_time # 完成偷盗所需时间
+        self.agent_list = [] # 保安列表
+        self.thief_list = {} # 小偷列表, key: thief id, value: thief类
+        self.screen_width = 1200 # 可视化界面大小
         self.screen_height = 800
-        self.loss = 0
+        self.loss = 0 # 损失
         self.x_min = int(self.screen_width / 2 -
                          self.grid_size / 2 * self.graph.l)
         self.x_max = int(self.screen_width / 2 +
@@ -161,7 +161,7 @@ class School(gym.Env):
                          self.grid_size / 2 * self.graph.w)
         self.x = list(
             range(self.x_min + int(self.grid_size / 2), self.x_max,
-                  self.grid_size)) * self.graph.w  # 每一小格20*20像素
+                  self.grid_size)) * self.graph.w  
         self.y = []
         for i in range(self.y_min + int(self.grid_size / 2), self.y_max,
                        self.grid_size):
@@ -170,12 +170,12 @@ class School(gym.Env):
         self.actions = ['n', 's', 'w', 'e', 'stop']  # 上下左右以及不动五个动作
 
         self.t = dict()  # 状态转移的数据格式为字典
-        self.viewer = None
-        self.obstacle_mask = None
+        self.viewer = None # 可视化界面类
+        self.obstacle_mask = None # 障碍物mask
         self.init_env()
         self.init_state = None
-        # self.init_state = self.GetInitState() # 需要初始化每个保安的初始位置  df part
-        if self.init_state is None:  # 随机初始化位置，仅适用于4个保安的情况，否则报错
+        # self.init_state = self.GetInitState() # 需要初始化每个保安的初始位置 
+        if self.init_state is None:  # 随机初始化位置
             self.init_state = [
                 0, self.graph.l - 1,
                 self.graph.l * self.graph.w - self.graph.l,
@@ -184,7 +184,7 @@ class School(gym.Env):
         self.state = self.init_state
         self.init_agent()
 
-    def init_env(self):
+    def init_env(self): # 初始化环境
         # 建立状态转移关系
         for state in range(self.graph.l * self.graph.w):
             key = "%d_stop" % (state)
@@ -202,8 +202,8 @@ class School(gym.Env):
             agent = Agent(self.state[num], num, self.grid_size)
             self.agent_list.append(agent)
 
-    def generate_thief(self):
-        invalid_loc = self.obstacle_mask.copy()
+    def generate_thief(self): # 随机产生小偷
+        invalid_loc = self.obstacle_mask.copy() # 去除障碍物位置
         invalid_loc = invalid_loc.flatten()
         for agent in self.agent_list:
             invalid_loc[agent.get_state()] = 1
@@ -213,12 +213,12 @@ class School(gym.Env):
                                     replace=False)
         for id, loc in enumerate(loc_list):
             thief = Thief(loc_list[id], id, self.grid_size)
-            thief.render()
+            thief.render() # 渲染小偷
             self.viewer.add_geom(thief.viz)
             thief.set_location(self.x[loc], self.y[loc])
             self.thief_list[id] = thief
 
-    def cal_loss(self):
+    def cal_loss(self): # 计算损失
         keys = list(self.thief_list.keys())
         self.loss += len(keys)
         for k in keys:
@@ -233,7 +233,7 @@ class School(gym.Env):
         yn = neighbor.getId() % self.graph.l
         detect_means = np.mean(self.detected_graph) # 是否需要用平均频次来作为参考
 
-        thief_inc = self.porb_distrib[xn, yn] - self.porb_distrib[xm, ym] # 概率分布增量
+        thief_inc = self.prob_distrib[xn, yn] - self.prob_distrib[xm, ym] # 概率分布增量
         
         time_delta = 0
         cnt = 0
@@ -299,11 +299,11 @@ class School(gym.Env):
             action.append(direction)
         return action
 
-    def set_seed(self, seed):
+    def set_seed(self, seed): # 设置随机数种子
         random.seed(seed)
         np.random.seed(seed)
 
-    def getStates(self):
+    def getStates(self): # 获得状态空间
         return self.states
     
     def detect(self, iteration):
@@ -341,10 +341,10 @@ class School(gym.Env):
                     self.agent_list[i].add_guard_nearby(j)
                     self.agent_list[j].add_guard_nearby(i)
         
-    def setState(self, s):
+    def setState(self, s): # 设置状态
         self.state = s
 
-    def getRandomAction(self):
+    def getRandomAction(self): # 随机策略
         action = [agent.random_action(self) for agent in self.agent_list]
         return action
 
@@ -354,7 +354,7 @@ class School(gym.Env):
     # (1,0) (1,1) (1,2)
     # (0,0) (0,1) (0,2)
 
-    def generate_obstacle(self, num):
+    def generate_obstacle(self, num): # 随机产生障碍物
         self.obstacle_mask = np.zeros(
             (self.graph.w, self.graph.l))  # 注意array的行列顺序与gym中的顺序有所区分
         obstacle_list = random.sample(range(len(self.states)), num)
@@ -364,7 +364,7 @@ class School(gym.Env):
             self.obstacle_mask[row][col] = 1
 
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        self.obstacle_mask = cv2.dilate(self.obstacle_mask, kernel)
+        self.obstacle_mask = cv2.dilate(self.obstacle_mask, kernel) # 膨胀障碍物
         # 删除和障碍物相连的边
         for i in range(self.graph.w):
             for j in range(self.graph.l):
@@ -388,7 +388,7 @@ class School(gym.Env):
                         self.graph.getVertex(i * self.graph.l +
                                              j).delNeighbor(n)
 
-    def cal_state_dist(self, s1, s2):
+    def cal_state_dist(self, s1, s2): # 计算manhattan distance
         row1 = s1 // self.graph.l
         col1 = s1 % self.graph.l
         row2 = s2 // self.graph.l
@@ -435,12 +435,12 @@ class School(gym.Env):
 
         return next_state_list
 
-    def reset(self):
+    def reset(self): # 重置环境
 
         self.state = self.init_state
         return self.state
 
-    def render(self, mode='human'):
+    def render(self, mode='human'): # 渲染环境
 
         if self.viewer is None:
             self.viewer = rendering.Viewer(self.screen_width,
@@ -469,8 +469,9 @@ class School(gym.Env):
 
             for i in self.lines:
                 self.viewer.add_geom(i)
+            
+            # 渲染障碍物
             self.obstacles = []
-
             for i in range(self.graph.w):
                 for j in range(self.graph.l):
                     if self.obstacle_mask[i][j] == 1:
@@ -489,29 +490,29 @@ class School(gym.Env):
 
         if self.state is None:
             return None
-        for agent in self.agent_list:
+        for agent in self.agent_list: # 设置保安位置
             state = agent.get_state()
             # print('state:', state)
             agent.set_location(self.x[state], self.y[state])
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
-    def close(self):
+    def close(self): # 关闭可视化界面
         if self.viewer:
             self.viewer.close()
     
     def generate_probability_distribution(self):
         # 获取小偷概率分布图（从左上角开始的）
         # kong
-        self.porb_mask = copy.deepcopy(self.obstacle_mask)
-        self.porb_mask *= -1
-        self.porb_mask += 1
+        self.prob_mask = copy.deepcopy(self.obstacle_mask)
+        self.prob_mask *= -1
+        self.prob_mask += 1
         k_size = 11
         gauss_kernel = cv2.getGaussianKernel(k_size, 1)
         gauss_kernel = np.dot(gauss_kernel, gauss_kernel.T)
         gauss_kernel[gauss_kernel < 0.001] = 0.001
 
-        self.porb_distrib = np.zeros((self.graph.w, self.graph.l))
+        self.prob_distrib = np.zeros((self.graph.w, self.graph.l))
         keys = list(self.thief_list.keys())
         for key in keys:
             thief = self.thief_list[key]
@@ -526,9 +527,9 @@ class School(gym.Env):
             x4 = min(k_size - 1, self.graph.w - 1 - x0 + (k_size // 2))
             y3 = max(0, (k_size // 2) - y0)
             y4 = min(k_size - 1, self.graph.l - 1 - y0 + (k_size // 2))
-            self.porb_distrib[x1:x2, y1:y2] += gauss_kernel[x3:x4, y3:y4]
+            self.prob_distrib[x1:x2, y1:y2] += gauss_kernel[x3:x4, y3:y4]
 
-        self.porb_distrib = self.porb_distrib * self.porb_mask
+        self.prob_distrib = self.prob_distrib * self.prob_mask
 
 
 if __name__ == '__main__':
@@ -538,7 +539,6 @@ if __name__ == '__main__':
 
     for i in range(1000):
         env.detect(i)
-        # 假设2s时出现小偷，10s偷完，这里需要根据需要设置合适的小偷产生模型
         print('times:', i)
         if i % 50 == 10:
             env.generate_thief()

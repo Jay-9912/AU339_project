@@ -1,66 +1,66 @@
 from my_exception import *
 
-class Vertex:
+class Vertex: # 节点类
     def __init__(self,key):
         self.id = key
-        self.connectedTo = {}
-        self.direction = {}
+        self.connectedTo = {} # key: vertex id, value: (方向，边权)
+        self.direction = {} # key: 方向， value: vertex id
 
-    def addNeighbor(self,nbr,direction,weight=0):
+    def addNeighbor(self,nbr,direction,weight=0): # 添加邻居节点
         self.connectedTo[nbr] = (direction, weight)
         self.direction[direction] = nbr
-    
-    def delNeighbor(self,nbr):
+     
+    def delNeighbor(self,nbr):  # 删除邻居节点
         _ = self.direction.pop(self.connectedTo[nbr][0])
         _ = self.connectedTo.pop(nbr)
 
-    def __str__(self):
+    def __str__(self): # 打印信息
         return str(self.id) + ' connectedTo: ' + str([str(x) + ' direction: ' + self.connectedTo[x][0] for x in self.connectedTo])
 
-    def getConnections(self):
+    def getConnections(self): # 获取所有邻居的vertex id
         return self.connectedTo.keys()
 
-    def getId(self):
+    def getId(self): # 获取vertex id
         return self.id
 
-    def getWeight(self,nbr):
+    def getInfo(self,nbr): # 获取邻居节点nbr的信息
         return self.connectedTo[nbr]
     
-    def getDirection(self):
+    def getDirection(self): # 获取当前节点对应的可行方向
         return self.direction.keys()
     
-    def getNeighbor(self, d):
+    def getNeighbor(self, d): # 获取某方相对应的邻居的vertex id
         return self.direction[d]
 
-class Graph:
+class Graph: # 图类
     def __init__(self):
-        self.vertList = {}
-        self.numVertices = 0
-        self.edgeList = []
+        self.vertList = {} # 所有节点，key: vertex id , value: 节点类
+        self.numVertices = 0 # 总的节点个数
+        self.edgeList = [] # 边集
 
-    def addVertex(self,key):
+    def addVertex(self,key): # 添加新节点
         self.numVertices = self.numVertices + 1
         newVertex = Vertex(key)
         self.vertList[key] = newVertex
         return newVertex
 
-    def getVertex(self,n):
+    def getVertex(self,n): # 获得节点n
         if n in self.vertList:
             return self.vertList[n]
         else:
             return None
 
-    def __contains__(self,n):
+    def __contains__(self,n): # 查询节点n是否存在
         return n in self.vertList
 
-    def addEdge(self,f,t,direction,cost=0):
+    def addEdge(self,f,t,direction,cost=0): # 添加有向边(f,t)
         if f not in self.vertList:
             nv = self.addVertex(f)
         if t not in self.vertList:
             nv = self.addVertex(t)
         self.vertList[f].addNeighbor(t, direction, cost)
 
-    def delEdge(self,f,t):
+    def delEdge(self,f,t): # 删除有向边(f,t)
         try:
             if f not in self.vertList:
                 raise NodeNotExistError(f)
@@ -73,18 +73,18 @@ class Graph:
         else:
             self.vertList[f].delNeighbor(t)
         
-    def getVertices(self):
+    def getVertices(self): # 获得所有vertex id
         return self.vertList.keys()
 
     def __iter__(self):
         return iter(self.vertList.values())
 
-class Rect_Graph(Graph):
+class Rect_Graph(Graph): # 矩形图，Graph的派生类
     def __init__(self, l, w):
         super().__init__()
-        self.l = l
-        self.w = w
-        self.gen_node_and_edge()
+        self.l = l # 长
+        self.w = w # 宽
+        self.gen_node_and_edge() # 产生网格图
 
     def gen_node_and_edge(self):
         for i in range(self.l*self.w):
