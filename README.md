@@ -9,7 +9,7 @@
 
 3. Installation
 
-    We modify the ***gym*** module for some additional function. Concretely, you should add the function below to ***class Viewer*** in ***rendering.py***.
+    We modify the ***gym*** module for some additional function. Concretely, you should add the function below to ***class Geom*** in ***rendering.py***.
 
     ```python
         def set_color_rgbd(self, r, g, b, d): 
