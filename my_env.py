@@ -225,6 +225,7 @@ class School(gym.Env):
             self.thief_list[k].escape = 1  # 逃跑成功
             self.viewer.geoms.remove(self.thief_list[k].viz)  # 删除图形显示
             self.thief_list.pop(k)  # 删除键
+
     def cal_weight(self, me, neighbor, current_time):
         xm = me.get_state() // self.graph.l
         ym = me.get_state() % self.graph.l
@@ -233,24 +234,52 @@ class School(gym.Env):
         detect_means = np.mean(self.detected_graph) # 是否需要用平均频次来作为参考
 
         thief_inc = self.porb_distrib[xn, yn] - self.porb_distrib[xm, ym] # 概率分布增量
-        time_delta = current_time - self.time_flow[xn, yn] # 时间间隔
-
-        detect_need = 0 # negative value
+        
+        time_delta = 0
+        cnt = 0
+        cnt_list = []
+        cnt_list.append(me.get_state())
         for next_neighbor in list(self.graph.getVertex(neighbor.getId()).getConnections()):
-            if next_neighbor != me.get_state():
+            cnt_list.append(next_neighbor)
+            for nnext_neighbor in list(self.graph.getVertex(next_neighbor).getConnections()):
+                if nnext_neighbor not in cnt_list:
+                    xnn = nnext_neighbor // self.graph.l
+                    ynn = nnext_neighbor % self.graph.l
+                    time_delta += current_time - self.time_flow[xnn, ynn] # 时间间隔
+                    cnt += 1
+                    cnt_list.append(nnext_neighbor)
+        time_delta /= max(cnt,1)
+
+        detect_need = 0 # invert
+        cnt = 0.5
+        cnt_list = []
+        cnt_list.append(me.get_state())
+        cnt_list.append(neighbor.getId())
+        detect_need += 0.5*self.detected_graph[xn,yn]
+        for next_neighbor in list(self.graph.getVertex(neighbor.getId()).getConnections()):
+            if next_neighbor not in cnt_list:
                 xnn = next_neighbor // self.graph.l
                 ynn = next_neighbor % self.graph.l
-                detect_need -= 0.5 * self.detected_graph[xnn, ynn]
-        detect_need -= 1*self.detected_graph[xn,yn]
+                detect_need += 0.5*self.detected_graph[xnn, ynn]
+                cnt += 0.5
+                cnt_list.append(next_neighbor)
+            for nnext_neighbor in list(self.graph.getVertex(next_neighbor).getConnections()):
+                if nnext_neighbor not in cnt_list:
+                    xnn = nnext_neighbor // self.graph.l
+                    ynn = nnext_neighbor % self.graph.l
+                    detect_need += 0.3*self.detected_graph[xnn, ynn]
+                    cnt += 0.3
+                    cnt_list.append(nnext_neighbor)
 
         nearby_repulse = 0# negative value
         for nearby_agent_id in me.guard_nearby:
             nearby_agent = self.agent_list[nearby_agent_id]
             xna = nearby_agent.get_state() // self.graph.l
             yna = nearby_agent.get_state() % self.graph.l
-            nearby_repulse -= 0.1*((xn - xm)*(xna - xn) + (yn - ym)*(yna - yn)) # 利用向量乘法
+            nearby_repulse -= ((xn - xm)*(xna - xn) + (yn - ym)*(yna - yn)) # 利用向量乘法
 
-        weight = 1000*thief_inc + 1*time_delta + 1*(detect_need- 2.5*detect_means) + 1*nearby_repulse
+        #print(1000*thief_inc, 2*time_delta, -1*(detect_need- cnt*detect_means), 50*nearby_repulse)
+        weight = 1000*thief_inc + 2*time_delta - 1*(detect_need - cnt*detect_means) + 50*nearby_repulse
 
         return weight
     
@@ -264,7 +293,7 @@ class School(gym.Env):
             for n in neighbors:
                 weight = self.cal_weight(agent, self.graph.getVertex(n), iteration)
                 chosen[n] = weight
-            print(chosen)
+            #print(chosen)
             choice = max(chosen, key=chosen.get)
             direction = node.connectedTo[choice][0]
             action.append(direction)
@@ -312,7 +341,6 @@ class School(gym.Env):
                     self.agent_list[i].add_guard_nearby(j)
                     self.agent_list[j].add_guard_nearby(i)
         
-
     def setState(self, s):
         self.state = s
 
@@ -400,9 +428,10 @@ class School(gym.Env):
             keys = list(self.thief_list.keys())
             for k in keys:
                 if self.cal_state_dist(agent.get_state(),
-                                       self.thief_list[k].get_state()) <= 1:
+                                       self.thief_list[k].get_state()) <= 2:
                     self.viewer.geoms.remove(self.thief_list[k].viz)  # 删除图形显示
                     self.thief_list.pop(k)  # 删除键
+                    self.generate_probability_distribution
 
         return next_state_list
 
@@ -477,14 +506,15 @@ class School(gym.Env):
         self.porb_mask = copy.deepcopy(self.obstacle_mask)
         self.porb_mask *= -1
         self.porb_mask += 1
-        k_size = 9
+        k_size = 11
         gauss_kernel = cv2.getGaussianKernel(k_size, 1)
         gauss_kernel = np.dot(gauss_kernel, gauss_kernel.T)
         gauss_kernel[gauss_kernel < 0.001] = 0.001
 
         self.porb_distrib = np.zeros((self.graph.w, self.graph.l))
         for id in range(len(self.thief_list)):
-            i = self.thief_list[id].get_state()
+            thief = self.thief_list[id]
+            i = thief.get_state()
             x0 = i // self.graph.l
             y0 = i % self.graph.l
             x1 = max(0, x0 - (k_size // 2))
@@ -508,10 +538,11 @@ if __name__ == '__main__':
     for i in range(1000):
         env.detect(i)
         # 假设2s时出现小偷，10s偷完，这里需要根据需要设置合适的小偷产生模型
-        if i%7 == 3:
+        print('times:', i)
+        if i % 50 == 10:
             env.generate_thief()
             env.generate_probability_distribution()
-        if i == 10: 
+        if i % 50 == 35: 
             env.cal_loss()
             print('loss:', env.loss)
         # if i ==3 :
