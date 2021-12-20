@@ -431,7 +431,7 @@ class School(gym.Env):
                                        self.thief_list[k].get_state()) <= 2:
                     self.viewer.geoms.remove(self.thief_list[k].viz)  # 删除图形显示
                     self.thief_list.pop(k)  # 删除键
-                    self.generate_probability_distribution
+                    self.generate_probability_distribution()
 
         return next_state_list
 
@@ -512,8 +512,9 @@ class School(gym.Env):
         gauss_kernel[gauss_kernel < 0.001] = 0.001
 
         self.porb_distrib = np.zeros((self.graph.w, self.graph.l))
-        for id in range(len(self.thief_list)):
-            thief = self.thief_list[id]
+        keys = list(self.thief_list.keys())
+        for key in keys:
+            thief = self.thief_list[key]
             i = thief.get_state()
             x0 = i // self.graph.l
             y0 = i % self.graph.l
