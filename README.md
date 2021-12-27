@@ -24,6 +24,4 @@
     - [x] alert on theft event and perception of other guards nearby
     - [x] visualize the sight of guards
     - [x] add cartoon images to guards and thieves
-    - [ ] patrolling algorithm
-    - [ ] dispatching algorithm
-
+    - [x] patrolling algorithm
