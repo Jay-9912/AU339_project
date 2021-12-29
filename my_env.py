@@ -599,8 +599,8 @@ if __name__ == '__main__':
         # if i ==3 :
         #     del env.thief_list[1]
         env.render()
-        #action = env.getAction(i)
-        action = env.getRandomAction()  # list
+        action = env.getAction(i)
+        # action = env.getRandomAction()  # list
         # print(env.state)
         env.step(action)
         time.sleep(0.2)
